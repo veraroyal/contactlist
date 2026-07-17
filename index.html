@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VERA 영업관리팀 대시보드</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-word">VERA</span>
+        <span class="brand-sub">영업관리팀 대시보드</span>
+      </div>
+
+      <nav class="side-nav" id="side-nav">
+        <div class="nav-group" data-key="news">
+          <button class="nav-parent" data-key="news" type="button">
+            <span>뉴스 스카우트</span>
+            <span class="nav-caret">▾</span>
+          </button>
+          <div class="nav-children" id="news-tree"></div>
+        </div>
+
+        <div class="nav-group" data-key="targets">
+          <button class="nav-parent" data-key="targets" type="button">
+            <span>연락대상</span>
+            <span class="nav-caret">▾</span>
+          </button>
+          <div class="nav-children" id="targets-tree"></div>
+        </div>
+
+        <div class="nav-group" data-key="cards">
+          <button class="nav-parent nav-leaf" data-key="cards" type="button">
+            <span>명함리스트</span>
+          </button>
+        </div>
+      </nav>
+
+      <div class="sidebar-divider"></div>
+      <div class="smtp-badge not-ready">조회 전용 공개 데모 · 이름/이메일/전화 마스킹됨</div>
+      <div class="sidebar-spacer"></div>
+    </aside>
+
+    <main class="content">
+      <header class="content-header">
+        <div class="header-text">
+          <h1 id="content-title">뉴스 스카우트</h1>
+          <p id="content-subtitle" class="content-subtitle"></p>
+        </div>
+        <input id="search-input" class="search-input" type="search" placeholder="검색" />
+      </header>
+
+      <div id="view-body"></div>
+    </main>
+  </div>
+
+  <template id="contact-row-template">
+    <tr class="contact-row">
+      <td class="contact-name"></td>
+      <td class="contact-title"></td>
+      <td class="contact-email"></td>
+      <td class="contact-lastcontact"></td>
+    </tr>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
