@@ -247,7 +247,7 @@
     } else if (state.view === 'cards') {
       el.contentTitle.textContent = '명함리스트';
       const total = state.cardsData ? state.cardsData.TotalContacts : '...';
-      el.contentSubtitle.textContent = `전체 ${total}명 (이름·이메일·전화 일부 마스킹)`;
+      el.contentSubtitle.textContent = `전체 ${total}명 (가상 데이터: 이름/이메일 허구)`;
     }
   }
 
