@@ -39,8 +39,20 @@
       </nav>
 
       <div class="sidebar-divider"></div>
-      <div class="smtp-badge not-ready">조회 전용 공개 데모 · 이름/이메일/전화 마스킹됨</div>
+      <div class="smtp-badge not-ready">공개 데모 · 발송 버튼은 비활성 (실제 발송 안 됨)</div>
+
       <div class="sidebar-spacer"></div>
+
+      <div id="side-selection" class="side-selection hidden">
+        <div class="side-selection-summary">
+          <strong id="selection-count">0명</strong>
+          <span id="selection-companies">선택된 회사 없음</span>
+        </div>
+        <div class="side-selection-actions">
+          <button id="clear-selection-btn" class="btn btn-ghost btn-sm">해제</button>
+          <button id="open-compose-btn" class="btn btn-primary btn-sm">발송 준비</button>
+        </div>
+      </div>
     </aside>
 
     <main class="content">
@@ -56,8 +68,43 @@
     </main>
   </div>
 
+  <div id="compose-overlay" class="overlay hidden">
+    <div class="compose-panel">
+      <div class="compose-header">
+        <h2 id="compose-title">메일 발송</h2>
+        <button id="close-compose-btn" class="btn-icon" aria-label="닫기">✕</button>
+      </div>
+
+      <div class="compose-body">
+        <label class="field">
+          <span>받는사람 (To, 쉼표로 구분)</span>
+          <input id="compose-to" type="text" placeholder="me@example.com" />
+        </label>
+        <label class="field">
+          <span>참조 (Cc, 선택)</span>
+          <input id="compose-cc" type="text" placeholder="" />
+        </label>
+        <label class="field">
+          <span>제목</span>
+          <input id="compose-subject" type="text" />
+        </label>
+        <label class="field">
+          <span>본문</span>
+          <textarea id="compose-body" rows="14"></textarea>
+        </label>
+      </div>
+
+      <div id="compose-message" class="compose-message hidden"></div>
+
+      <div class="compose-footer">
+        <button id="send-btn" class="btn btn-primary btn-lg">발송 (데모)</button>
+      </div>
+    </div>
+  </div>
+
   <template id="contact-row-template">
     <tr class="contact-row">
+      <td class="col-check"><input type="checkbox" class="contact-checkbox" /></td>
       <td class="contact-name"></td>
       <td class="contact-title"></td>
       <td class="contact-email"></td>

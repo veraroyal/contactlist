@@ -1,4 +1,6 @@
 (() => {
+  const DEMO_MESSAGE = '공개 데모 사이트입니다. 실제 메일 발송은 로컬 프로그램(npm start)에서만 가능합니다.';
+
   const state = {
     view: 'news',
     newsDate: null,
@@ -7,9 +9,14 @@
     companies: [],
     infoLines: [],
     selectedCompany: null,
+    activeContact: null,
+    template: null,
+    selected: new Map(), // key: `${company}::${email}` -> { company, name, title, email }
     cardsData: null,
     search: '',
   };
+
+  const PLACEHOLDER_HINT = '사용 가능: {{이름}} {{직급}} {{이메일}} {{회사}} {{뉴스}} {{뉴스링크}} (미리보기 전용, 저장되지 않음)';
 
   const el = {
     sideNav: document.getElementById('side-nav'),
@@ -19,6 +26,20 @@
     contentSubtitle: document.getElementById('content-subtitle'),
     searchInput: document.getElementById('search-input'),
     viewBody: document.getElementById('view-body'),
+    sideSelection: document.getElementById('side-selection'),
+    selectionCount: document.getElementById('selection-count'),
+    selectionCompanies: document.getElementById('selection-companies'),
+    clearSelectionBtn: document.getElementById('clear-selection-btn'),
+    openComposeBtn: document.getElementById('open-compose-btn'),
+    overlay: document.getElementById('compose-overlay'),
+    composeTitle: document.getElementById('compose-title'),
+    closeComposeBtn: document.getElementById('close-compose-btn'),
+    composeTo: document.getElementById('compose-to'),
+    composeCc: document.getElementById('compose-cc'),
+    composeSubject: document.getElementById('compose-subject'),
+    composeBody: document.getElementById('compose-body'),
+    composeMessage: document.getElementById('compose-message'),
+    sendBtn: document.getElementById('send-btn'),
     rowTemplate: document.getElementById('contact-row-template'),
   };
 
@@ -33,6 +54,10 @@
     const res = await fetch(url);
     if (!res.ok) throw new Error(`요청 실패 (${res.status})`);
     return res.json();
+  }
+
+  function selKey(company, email) {
+    return `${company}::${email}`;
   }
 
   // ---------- Init ----------
@@ -57,6 +82,11 @@
 
     el.sideNav.addEventListener('click', onNavClick);
     el.searchInput.addEventListener('input', onSearchInput);
+    el.clearSelectionBtn.addEventListener('click', clearSelection);
+    el.openComposeBtn.addEventListener('click', openCompose);
+    el.closeComposeBtn.addEventListener('click', closeCompose);
+    el.overlay.addEventListener('click', (e) => { if (e.target === el.overlay) closeCompose(); });
+    el.sendBtn.addEventListener('click', doSend);
 
     selectNews();
   }
@@ -65,15 +95,15 @@
 
   function renderNewsMenu() {
     el.newsTree.innerHTML = '';
-    const btn = h('div', 'nav-month-group');
+    const group = h('div', 'nav-month-group');
     const leaf = document.createElement('button');
     leaf.type = 'button';
     leaf.className = 'nav-leaf active';
     const [y, m, d] = state.newsDate.split('-');
     leaf.textContent = `${y}.${m}.${d}`;
     leaf.dataset.newsHome = '1';
-    btn.appendChild(leaf);
-    el.newsTree.appendChild(btn);
+    group.appendChild(leaf);
+    el.newsTree.appendChild(group);
   }
 
   function renderTargetsMenu() {
@@ -136,12 +166,39 @@
   function selectCompany(companyName) {
     state.view = 'targets';
     state.selectedCompany = companyName;
+    state.activeContact = null;
+    const companyData = state.companies.find((c) => c.company === companyName);
+    state.template = defaultTemplateFor(companyData);
     clearAllActive();
     el.targetsTree.querySelectorAll('.nav-leaf').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.company === companyName);
     });
     renderHeader();
     renderView();
+  }
+
+  function defaultTemplateFor(companyData) {
+    const bodyLines = ['{{이름}} {{직급}}님, 안녕하세요.', '', '{{회사}} 관련하여 안부 인사드리며 연락드립니다.'];
+    if (companyData && companyData.news) {
+      bodyLines.push('', '최근 소식 잘 보았습니다 — {{뉴스}} ({{뉴스링크}})', '관련하여 편하실 때 잠시 통화나 미팅 가능하실지 여쭙고자 합니다.');
+    } else {
+      bodyLines.push('오랜만에 안부 여쭙고, 편하실 때 잠시 미팅 가능하실지 여쭙고자 합니다.');
+    }
+    bodyLines.push('', '감사합니다.');
+    return {
+      subject: '[{{회사}}] {{이름}} {{직급}}님께 안부 인사드립니다',
+      body: bodyLines.join('\n'),
+    };
+  }
+
+  function substituteTemplate(text, companyData, contact) {
+    return String(text || '')
+      .replace(/\{\{\s*이름\s*\}\}/g, contact.name)
+      .replace(/\{\{\s*직급\s*\}\}/g, contact.title)
+      .replace(/\{\{\s*이메일\s*\}\}/g, contact.email)
+      .replace(/\{\{\s*회사\s*\}\}/g, companyData.company)
+      .replace(/\{\{\s*뉴스링크\s*\}\}/g, companyData.newsLink || '')
+      .replace(/\{\{\s*뉴스\s*\}\}/g, companyData.news || '');
   }
 
   function selectCardsView() {
@@ -190,7 +247,7 @@
     } else if (state.view === 'cards') {
       el.contentTitle.textContent = '명함리스트';
       const total = state.cardsData ? state.cardsData.TotalContacts : '...';
-      el.contentSubtitle.textContent = `전체 ${total}명 (이름·이메일·전화 비공개)`;
+      el.contentSubtitle.textContent = `전체 ${total}명 (이름·이메일·전화 일부 마스킹)`;
     }
   }
 
@@ -272,6 +329,15 @@
       return;
     }
 
+    const split = h('div', 'targets-split');
+    split.appendChild(buildTargetListPane(companyData));
+    split.appendChild(buildDraftPane(companyData));
+    container.appendChild(split);
+
+    if (state.activeContact) updateDraftPreview(companyData);
+  }
+
+  function buildTargetListPane(companyData) {
     const panel = h('div', 'target-list-pane');
     const header = h('div', 'target-panel-header');
 
@@ -294,16 +360,30 @@
       newsRow.appendChild(link);
     }
     header.appendChild(newsRow);
-    panel.appendChild(header);
 
     const contacts = companyData.contacts.filter(
       (c) => !state.search || c.title.toLowerCase().includes(state.search)
     );
 
+    const selectAllBtn = document.createElement('button');
+    selectAllBtn.type = 'button';
+    selectAllBtn.className = 'btn btn-ghost btn-sm';
+    selectAllBtn.style.marginTop = '14px';
+    const allSelected = contacts.length > 0 && contacts.every((c) => state.selected.has(selKey(companyData.company, c.email)));
+    selectAllBtn.textContent = allSelected ? '전체 해제' : '전체 선택';
+    selectAllBtn.addEventListener('click', () => {
+      for (const c of contacts) setContactSelected(companyData, c, !allSelected);
+      updateSelectionBar();
+      renderView();
+    });
+    header.appendChild(selectAllBtn);
+
+    panel.appendChild(header);
+
     const table = document.createElement('table');
     table.className = 'contact-table';
     const thead = document.createElement('thead');
-    thead.innerHTML = '<tr><th>이름</th><th>직급</th><th>이메일</th><th>마지막 컨택</th></tr>';
+    thead.innerHTML = '<tr><th class="col-check"></th><th>이름</th><th>직급</th><th>이메일</th><th>마지막 컨택</th></tr>';
     table.appendChild(thead);
     const tbody = document.createElement('tbody');
 
@@ -316,11 +396,179 @@
       tr.querySelector('.contact-lastcontact').textContent = contact.daysSince != null
         ? `${contact.lastContact} (${contact.daysSince}일)`
         : (contact.lastContact || '-');
+
+      const checkbox = tr.querySelector('.contact-checkbox');
+      const key = selKey(companyData.company, contact.email);
+      checkbox.checked = state.selected.has(key);
+      tr.classList.toggle('contact-row-selected', checkbox.checked);
+      tr.classList.toggle(
+        'active-row',
+        !!state.activeContact && state.activeContact.email === contact.email && state.selectedCompany === companyData.company
+      );
+
+      checkbox.addEventListener('click', (e) => e.stopPropagation());
+      checkbox.addEventListener('change', () => {
+        setContactSelected(companyData, contact, checkbox.checked);
+        tr.classList.toggle('contact-row-selected', checkbox.checked);
+        updateSelectionBar();
+      });
+
+      tr.addEventListener('click', (e) => {
+        if (e.target.closest('.contact-checkbox')) return;
+        state.activeContact = contact;
+        tbody.querySelectorAll('tr.active-row').forEach((r) => r.classList.remove('active-row'));
+        tr.classList.add('active-row');
+        updateDraftPreview(companyData);
+      });
+
       tbody.appendChild(rowNode);
     }
     table.appendChild(tbody);
     panel.appendChild(table);
-    container.appendChild(panel);
+    return panel;
+  }
+
+  function buildDraftPane(companyData) {
+    const pane = h('div', 'target-draft-pane');
+    if (!state.template) {
+      pane.appendChild(h('div', 'prompt-state', '템플릿을 불러오는 중입니다...'));
+      return pane;
+    }
+
+    const templateSection = h('div', 'draft-section');
+    const templateHead = h('div', 'draft-section-head');
+    templateHead.appendChild(h('h3', null, '회사 템플릿 (미리보기 전용)'));
+    const statusEl = h('span', 'draft-status', '데모 · 저장되지 않음');
+    templateHead.appendChild(statusEl);
+    templateSection.appendChild(templateHead);
+    templateSection.appendChild(h('p', 'draft-hint', PLACEHOLDER_HINT));
+
+    const subjectInput = document.createElement('input');
+    subjectInput.type = 'text';
+    subjectInput.className = 'draft-input';
+    subjectInput.value = state.template.subject;
+    templateSection.appendChild(subjectInput);
+
+    const bodyInput = document.createElement('textarea');
+    bodyInput.className = 'draft-textarea';
+    bodyInput.rows = 9;
+    bodyInput.value = state.template.body;
+    templateSection.appendChild(bodyInput);
+
+    const onTemplateEdit = () => {
+      state.template = { subject: subjectInput.value, body: bodyInput.value };
+      if (state.activeContact) updateDraftPreview(companyData);
+    };
+    subjectInput.addEventListener('input', onTemplateEdit);
+    bodyInput.addEventListener('input', onTemplateEdit);
+
+    pane.appendChild(templateSection);
+    pane.appendChild(h('div', 'draft-divider'));
+
+    const previewSection = h('div', 'draft-section');
+    previewSection.appendChild(h('h3', null, '발송 미리보기 (데모)'));
+
+    const promptEl = h('div', 'draft-preview-prompt', '왼쪽 목록에서 대상자를 클릭하면 미리보기가 채워집니다.');
+    promptEl.id = 'preview-prompt';
+    previewSection.appendChild(promptEl);
+
+    const fields = h('div', 'draft-section');
+    fields.id = 'draft-preview-fields';
+    fields.classList.add('hidden');
+
+    const targetLabel = h('div', 'draft-preview-target');
+    targetLabel.id = 'preview-target-label';
+    fields.appendChild(targetLabel);
+
+    const toInput = document.createElement('input');
+    toInput.type = 'text';
+    toInput.className = 'draft-input';
+    toInput.id = 'preview-to-input';
+    toInput.readOnly = true;
+    fields.appendChild(toInput);
+
+    const previewSubjectInput = document.createElement('input');
+    previewSubjectInput.type = 'text';
+    previewSubjectInput.className = 'draft-input';
+    previewSubjectInput.id = 'preview-subject-input';
+    previewSubjectInput.readOnly = true;
+    fields.appendChild(previewSubjectInput);
+
+    const previewBodyInput = document.createElement('textarea');
+    previewBodyInput.className = 'draft-textarea';
+    previewBodyInput.id = 'preview-body-input';
+    previewBodyInput.rows = 10;
+    previewBodyInput.readOnly = true;
+    fields.appendChild(previewBodyInput);
+
+    const msgEl = h('div', 'draft-message hidden');
+    msgEl.id = 'draft-message';
+    fields.appendChild(msgEl);
+
+    const sendBtn = document.createElement('button');
+    sendBtn.type = 'button';
+    sendBtn.className = 'btn btn-primary';
+    sendBtn.textContent = '발송 (데모)';
+    sendBtn.addEventListener('click', () => {
+      showInlineMessage(msgEl, DEMO_MESSAGE, false);
+    });
+    fields.appendChild(sendBtn);
+
+    previewSection.appendChild(fields);
+    pane.appendChild(previewSection);
+
+    return pane;
+  }
+
+  function updateDraftPreview(companyData) {
+    const contact = state.activeContact;
+    const promptEl = document.getElementById('preview-prompt');
+    const fields = document.getElementById('draft-preview-fields');
+    if (!contact || !fields) return;
+
+    if (promptEl) promptEl.classList.add('hidden');
+    fields.classList.remove('hidden');
+
+    const label = document.getElementById('preview-target-label');
+    const toInput = document.getElementById('preview-to-input');
+    const subjInput = document.getElementById('preview-subject-input');
+    const bodyInput = document.getElementById('preview-body-input');
+    const msgEl = document.getElementById('draft-message');
+
+    if (label) label.textContent = `${contact.name} ${contact.title} · ${contact.email}`;
+    if (toInput) toInput.value = contact.email;
+    if (subjInput) subjInput.value = substituteTemplate(state.template.subject, companyData, contact);
+    if (bodyInput) bodyInput.value = substituteTemplate(state.template.body, companyData, contact);
+    if (msgEl) msgEl.classList.add('hidden');
+  }
+
+  function showInlineMessage(target, text, ok) {
+    target.textContent = text;
+    target.className = 'draft-message ' + (ok ? 'ok' : 'error');
+    target.classList.remove('hidden');
+  }
+
+  function setContactSelected(companyData, contact, selected) {
+    const key = selKey(companyData.company, contact.email);
+    if (selected) {
+      state.selected.set(key, { company: companyData.company, name: contact.name, title: contact.title, email: contact.email });
+    } else {
+      state.selected.delete(key);
+    }
+  }
+
+  function clearSelection() {
+    state.selected.clear();
+    updateSelectionBar();
+    renderView();
+  }
+
+  function updateSelectionBar() {
+    const count = state.selected.size;
+    el.sideSelection.classList.toggle('hidden', count === 0);
+    el.selectionCount.textContent = `${count}명`;
+    const companies = new Set([...state.selected.values()].map((v) => v.company));
+    el.selectionCompanies.textContent = companies.size ? [...companies].join(', ') : '선택된 회사 없음';
   }
 
   // ---------- Cards view ----------
@@ -363,6 +611,57 @@
     table.appendChild(tbody);
     wrap.appendChild(table);
     container.appendChild(wrap);
+  }
+
+  // ---------- Compose: bulk digest (demo only) ----------
+
+  function buildDigestBody() {
+    const byCompany = new Map();
+    for (const v of state.selected.values()) {
+      if (!byCompany.has(v.company)) byCompany.set(v.company, []);
+      byCompany.get(v.company).push(v);
+    }
+
+    const lines = [`VERA 영업관리팀 컨택 리스트 (${state.targetsDate})`, ''];
+    for (const [companyName, contacts] of byCompany) {
+      const companyData = state.companies.find((c) => c.company === companyName);
+      lines.push(`■ ${companyName}${companyData?.priority ? ` [우선순위 ${companyData.priority}]` : ''}`);
+      if (companyData?.news) {
+        lines.push(`  핵심뉴스: ${companyData.news}${companyData.newsLink ? ` (${companyData.newsLink})` : ''}`);
+      }
+      for (const c of contacts) {
+        lines.push(`  - ${c.name} ${c.title} <${c.email}>`);
+      }
+      lines.push('');
+    }
+    return lines.join('\n').trim();
+  }
+
+  function openCompose() {
+    if (state.selected.size === 0) return;
+    const companies = new Set([...state.selected.values()].map((v) => v.company));
+    el.composeTitle.textContent = '메일 발송 (데모)';
+    el.composeTo.value = '';
+    el.composeCc.value = '';
+    el.composeSubject.value = `VERA 영업관리팀 컨택 리스트 (${state.targetsDate}) - ${companies.size}개사 ${state.selected.size}명`;
+    el.composeBody.value = buildDigestBody();
+    el.composeMessage.classList.add('hidden');
+    el.overlay.classList.remove('hidden');
+  }
+
+  function closeCompose() {
+    el.overlay.classList.add('hidden');
+  }
+
+  function doSend() {
+    el.composeMessage.classList.add('hidden');
+    showComposeMessage(DEMO_MESSAGE, false);
+  }
+
+  function showComposeMessage(text, ok) {
+    el.composeMessage.textContent = text;
+    el.composeMessage.className = 'compose-message ' + (ok ? 'ok' : 'error');
+    el.composeMessage.classList.remove('hidden');
   }
 
   init();
