@@ -16,7 +16,7 @@
     search: '',
   };
 
-  const PLACEHOLDER_HINT = '사용 가능: {{이름}} {{직급}} {{이메일}} {{회사}} {{뉴스}} {{뉴스링크}} (미리보기 전용, 저장되지 않음)';
+  const PLACEHOLDER_HINT = '사용 가능: {{이름}} {{직급}} {{이메일}} {{회사}} (미리보기 전용, 저장되지 않음 / 뉴스는 왼쪽 패널 참고용이며 본문에는 자동 삽입되지 않습니다)';
 
   const el = {
     sideNav: document.getElementById('side-nav'),
@@ -178,13 +178,32 @@
   }
 
   function defaultTemplateFor(companyData) {
-    const bodyLines = ['{{이름}} {{직급}}님, 안녕하세요.', '', '{{회사}} 관련하여 안부 인사드리며 연락드립니다.'];
-    if (companyData && companyData.news) {
-      bodyLines.push('', '최근 소식 잘 보았습니다 — {{뉴스}} ({{뉴스링크}})', '관련하여 편하실 때 잠시 통화나 미팅 가능하실지 여쭙고자 합니다.');
-    } else {
-      bodyLines.push('오랜만에 안부 여쭙고, 편하실 때 잠시 미팅 가능하실지 여쭙고자 합니다.');
-    }
-    bodyLines.push('', '감사합니다.');
+    const bodyLines = [
+      '{{이름}} {{직급}}님, 안녕하십니까.',
+      '',
+      'VERA 팀장입니다.',
+      '',
+      '지난번 인사드린 이후로 오랜만에 연락드립니다.',
+      '',
+      '당시 이야기 나누었던 [관심 주제/이슈] 관련하여, 참고하실 만한 [서비스/솔루션/업데이트] 내용이 있어 공유해 드립니다.',
+      '',
+      '주요 내용',
+      '[특징/내용 1]: [핵심 포인트/이점]',
+      '[특징/내용 2]: [도입/적용 시 기대 효과]',
+      '[특징/내용 3]: [지원 사항 또는 적용 방안]',
+      '',
+      '검토해 보실 수 있도록 관련 상세 자료를 첨부해 두었습니다.',
+      '',
+      '관련해서 짧게 의견 나누실 시간이 있으시다면, 연락부탁드립니다.',
+      '',
+      '감사합니다.',
+      '',
+      'VERA',
+      '',
+      '소속/직급: VERA 팀장',
+      '연락처: 010-XXXX-XXXX',
+      '이메일: vera.royal.2025@gmail.com',
+    ];
     return {
       subject: '[{{회사}}] {{이름}} {{직급}}님께 안부 인사드립니다',
       body: bodyLines.join('\n'),
@@ -196,9 +215,7 @@
       .replace(/\{\{\s*이름\s*\}\}/g, contact.name)
       .replace(/\{\{\s*직급\s*\}\}/g, contact.title)
       .replace(/\{\{\s*이메일\s*\}\}/g, contact.email)
-      .replace(/\{\{\s*회사\s*\}\}/g, companyData.company)
-      .replace(/\{\{\s*뉴스링크\s*\}\}/g, companyData.newsLink || '')
-      .replace(/\{\{\s*뉴스\s*\}\}/g, companyData.news || '');
+      .replace(/\{\{\s*회사\s*\}\}/g, companyData.company);
   }
 
   function selectCardsView() {
